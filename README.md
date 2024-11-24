@@ -1,8 +1,14 @@
 # dupedeny-chromeExtension
 
-1. git clone git@github.com:DupeDeny/dupedeny-chromeExtension.git
+1. Git clone the repo:
+   '''
+   git clone git@github.com:DupeDeny/dupedeny-chromeExtension.git
+   '''
 
-2. cd dupedeny-chromeExtension
+2. Navigate to directory
+   '''
+   cd dupedeny-chromeExtension
+   '''
 
 3. Install dependencies
    ```

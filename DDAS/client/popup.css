@@ -1,0 +1,40 @@
+/* popup.css */
+body {
+    font-family: Arial, sans-serif;
+    width: 300px;
+    margin: 0;
+    padding: 10px;
+}
+
+#alert-container {
+    text-align: center;
+}
+
+h2 {
+    color: #D9534F;
+}
+
+table {
+    width: 100%;
+    margin-top: 10px;
+}
+
+th,
+td {
+    text-align: left;
+    padding: 5px;
+}
+
+button {
+    background-color: #5cb85c;
+    color: white;
+    padding: 10px;
+    border: none;
+    cursor: pointer;
+    width: 100%;
+    margin-top: 10px;
+}
+
+button:hover {
+    background-color: #4cae4c;
+}

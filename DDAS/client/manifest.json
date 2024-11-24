@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "DDAS_Extension",
+  "version": "1.0.0",
+  "description": "A Chrome extension to alert users of duplicate downloads.",
+  "permissions": [
+    "downloads",
+    "storage",
+    "notifications",
+    "background",
+    "scripting"
+  ],
+  "host_permissions": ["*://*/*"],
+  "icons": {
+    "32": "icon.png",
+    "48": "icon.png"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "48": "icon.png"
+    }
+  }
+}

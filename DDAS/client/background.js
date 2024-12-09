@@ -1,115 +1,3 @@
-// async function generateHash(metadata) {
-//   const encoder = new TextEncoder();
-//   const data = encoder.encode(metadata);
-//   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-//   return Array.from(new Uint8Array(hashBuffer))
-//     .map((byte) => byte.toString(16).padStart(2, "0"))
-//     .join("");
-// }
-
-// let pausedDownloads = {};
-
-// // Helper: Check for duplicates via the server
-// async function checkDuplicateOnServer(fileName, fileSize, fileHash) {
-//   try {
-//     const response = await fetch("http://localhost:5000/api/files/add", {
-//       method: "POST",
-//       headers: {
-//         "Content-Type": "application/json",
-//       },
-//       body: JSON.stringify({
-//         fileName,
-//         fileHash,
-//         fileSize,
-//         userId: "user123", // Replace with actual user ID if needed
-//       }),
-//     });
-//     return response.json();
-//   } catch (err) {
-//     console.error("Error checking duplicate:", err);
-//     return null;
-//   }
-// }
-
-// chrome.downloads.onDeterminingFilename.addListener(
-//   async (downloadItem, suggest) => {
-//     console.log("Download started:", downloadItem.filename);
-//     try {
-//       // Pause the download
-//       await chrome.downloads.pause(downloadItem.id);
-
-//       const fileName = downloadItem.filename;
-//       const fileSize = downloadItem.fileSize;
-//       const metadataString = `${fileName}_${fileSize}`;
-//       const fileHash = await generateHash(metadataString);
-
-//       const duplicateResponse = await checkDuplicateOnServer(
-//         fileName,
-//         fileSize,
-//         fileHash
-//       );
-
-//       if (duplicateResponse && duplicateResponse.message === "Duplicate detected") {
-//         console.log("Duplicate detected:", duplicateResponse.record);
-//         pausedDownloads[downloadItem.id] = {
-//           fileName,
-//           fileHash,
-//           location: duplicateResponse.record.firstDownloadedBy, // Replace if more details are available
-//         };
-
-//         chrome.notifications.create(downloadItem.id.toString(), {
-//           type: "basic",
-//           iconUrl: "icon.png",
-//           title: "Duplicate File Detected",
-//           message: `The file "${fileName}" has already been downloaded.\nFirst downloaded by: ${duplicateResponse.record.firstDownloadedBy}`,
-//           buttons: [
-//             { title: "Continue Download" },
-//             { title: "Cancel Download" },
-//           ],
-//           requireInteraction: true,
-//         });
-
-//         suggest({ filename: fileName, conflict_action: "uniquify" });
-//       } else {
-//         // Resume download if no duplicate found
-//         console.log("No duplicate found. Resuming download.");
-//         await chrome.downloads.resume(downloadItem.id);
-//         suggest({ filename: fileName });
-//       }
-//     } catch (error) {
-//       console.error("Error in download handler:", error);
-//       chrome.downloads.resume(downloadItem.id); // Resume on error
-//       suggest({ filename: downloadItem.filename });
-//     }
-
-//     return true;
-//   }
-// );
-
-// chrome.notifications.onButtonClicked.addListener(
-//   async (notificationId, buttonIndex) => {
-//     const downloadId = parseInt(notificationId);
-
-//     if (pausedDownloads[downloadId]) {
-//       try {
-//         if (buttonIndex === 0) {
-//           await chrome.downloads.resume(downloadId);
-//           console.log(`Download ${downloadId} resumed`);
-//         } else {
-//           await chrome.downloads.cancel(downloadId);
-//           console.log(`Download ${downloadId} cancelled`);
-//         }
-
-//         delete pausedDownloads[downloadId];
-//         chrome.notifications.clear(notificationId);
-//       } catch (error) {
-//         console.error("Error handling notification click:", error);
-//       }
-//     }
-//   }
-// );
-
-
 async function generateHash(metadata) {
   const encoder = new TextEncoder();
   const data = encoder.encode(metadata);
@@ -118,7 +6,14 @@ async function generateHash(metadata) {
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
 }
-
+// Get userId from Chrome storage
+async function getUserId() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(["userId"], (result) => {
+      resolve(result.userId || null);
+    });
+  });
+}
 let pausedDownloads = {};
 
 // Helper: Check if a file already exists on the server
@@ -137,10 +32,19 @@ async function checkFileOnServer(fileHash) {
     return null;
   }
 }
-
 // Helper: Add a file record to the server
 async function addFileToServer(fileName, fileSize, fileHash) {
   try {
+    // Fetch the logged-in userId from local storage
+    const { userId } = await new Promise((resolve) =>
+      chrome.storage.local.get(["userId"], resolve)
+    );
+
+    if (!userId) {
+      console.error("User not logged in. Cannot add file.");
+      return null;
+    }
+
     const response = await fetch("http://localhost:5000/api/files/add", {
       method: "POST",
       headers: {
@@ -150,7 +54,7 @@ async function addFileToServer(fileName, fileSize, fileHash) {
         fileName,
         fileHash,
         fileSize,
-        userId: "user123", // Replace with actual user ID if needed
+        userId, // Use the dynamic userId
       }),
     });
     return response.json();
@@ -177,11 +81,22 @@ async function updateFileStatusOnServer(fileHash, userId, status) {
   }
 }
 
-// Handle download events
 chrome.downloads.onDeterminingFilename.addListener(
   async (downloadItem, suggest) => {
     console.log("Download started:", downloadItem.filename);
     try {
+      // Check if the user is logged in
+      const { userId } = await new Promise((resolve) =>
+        chrome.storage.local.get(["userId"], resolve)
+      );
+
+      if (!userId) {
+        console.error("User not logged in. Cannot process download.");
+        suggest({ filename: downloadItem.filename });
+        return true;
+      }
+      console.log("Download started by user:", userId);
+      
       // Pause the download
       await chrome.downloads.pause(downloadItem.id);
 
@@ -213,17 +128,23 @@ chrome.downloads.onDeterminingFilename.addListener(
           requireInteraction: true,
         });
 
+        // Only call suggest once with the conflict action
         suggest({ filename: fileName, conflict_action: "uniquify" });
       } else {
         // No duplicate: add to server and resume download
         console.log("No duplicate found. Adding file to DB.");
-        await addFileToServer(fileName, fileSize, fileHash);
-        await chrome.downloads.resume(downloadItem.id);
-        suggest({ filename: fileName });
+        const addFileResponse = await addFileToServer(fileName, fileSize, fileHash);
+        if (addFileResponse) {
+          // If file added successfully, resume the download
+          await chrome.downloads.resume(downloadItem.id);
+          suggest({ filename: fileName });
+        } else {
+          console.error("Error adding file to DB.");
+          suggest({ filename: downloadItem.filename });  // If failed to add file, just suggest original filename
+        }
       }
     } catch (error) {
       console.error("Error in download handler:", error);
-      chrome.downloads.resume(downloadItem.id); // Resume on error
       suggest({ filename: downloadItem.filename });
     }
 
@@ -231,23 +152,47 @@ chrome.downloads.onDeterminingFilename.addListener(
   }
 );
 
-// Handle notification button clicks
+// Function to initialize userId
+async function initializeUserId() {
+  const { userId } = await new Promise((resolve) =>
+    chrome.storage.local.get(["userId"], resolve)
+  );
+  return userId;
+}
+
+// Call the initializeUserId function when the script starts
+initializeUserId().then((userId) => {
+  console.log("UserId initialized:", userId);
+  // You can now use the userId in other parts of your script.
+});
+
 chrome.notifications.onButtonClicked.addListener(
   async (notificationId, buttonIndex) => {
     const downloadId = parseInt(notificationId);
 
     if (pausedDownloads[downloadId]) {
       const { fileHash } = pausedDownloads[downloadId];
+      
+      // Fetch userId dynamically inside the notification handler
+      const { userId } = await new Promise((resolve) =>
+        chrome.storage.local.get(["userId"], resolve)
+      );
+
+      if (!userId) {
+        console.error("User ID not found. Cannot proceed with the action.");
+        return;
+      }
+
       try {
         if (buttonIndex === 0) {
           // Continue download
           await chrome.downloads.resume(downloadId);
-          await updateFileStatusOnServer(fileHash, "user123", "completed");
+          await updateFileStatusOnServer(fileHash, userId, "completed");
           console.log(`Download ${downloadId} resumed and status updated`);
         } else {
           // Cancel download
           await chrome.downloads.cancel(downloadId);
-          await updateFileStatusOnServer(fileHash, "user123", "cancelled");
+          await updateFileStatusOnServer(fileHash, userId, "cancelled");
           console.log(`Download ${downloadId} cancelled and status updated`);
         }
 
@@ -259,3 +204,4 @@ chrome.notifications.onButtonClicked.addListener(
     }
   }
 );
+

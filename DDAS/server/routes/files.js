@@ -1,36 +1,7 @@
-// const express = require('express');
-// const FileRecord = require('../models/FileRecord');
-// const router = express.Router();
-
-// // Add a new file record
-// router.post('/add', async (req, res) => {
-//     const { fileName, fileHash, fileSize, userId } = req.body;
-//     try {
-//         let record = await FileRecord.findOne({ fileHash });
-//         if (record) {
-//             record.downloadCount++;
-//             record.downloadHistory.push({ userId, downloadedAt: new Date(), status: 'completed' });
-//             await record.save();
-//             return res.status(200).json({ message: 'Duplicate detected', record });
-//         }
-
-//         record = new FileRecord({
-//             fileName,
-//             fileHash,
-//             fileSize,
-//             firstDownloadedBy: userId,
-//             downloadHistory: [{ userId, downloadedAt: new Date(), status: 'completed' }],
-//         });
-//         await record.save();
-//         res.status(201).json({ message: 'File added successfully', record });
-//     } catch (err) {
-//         res.status(500).json({ error: 'Error saving record', details: err.message });
-//     }
-// });
-
 // module.exports = router;
 const express = require("express");
 const FileRecord = require("../models/FileRecord");
+const users = require("../config/db");
 const router = express.Router();
 
 // Validate incoming request body
@@ -63,9 +34,10 @@ router.post("/check", async (req, res) => {
   }
 });
 
-// Add a new file record
 router.post("/add", async (req, res) => {
   const { fileName, fileHash, fileSize, userId } = req.body;
+
+  console.log("Received data:", req.body); // Log the request body
 
   const validationError = validateRequestBody(
     ["fileName", "fileHash", "fileSize", "userId"],
@@ -78,6 +50,7 @@ router.post("/add", async (req, res) => {
   try {
     let record = await FileRecord.findOne({ fileHash });
     if (record) {
+      console.log("File exists, updating...");
       record.downloadCount++;
       record.downloadHistory.push({
         userId,
@@ -85,11 +58,10 @@ router.post("/add", async (req, res) => {
         status: "completed",
       });
       await record.save();
-      return res
-        .status(200)
-        .json({ message: "Duplicate detected", record });
+      return res.status(200).json({ message: "Duplicate detected", record });
     }
 
+    console.log("File not found, adding new record...");
     record = new FileRecord({
       fileName,
       fileHash,
@@ -97,13 +69,15 @@ router.post("/add", async (req, res) => {
       firstDownloadedBy: userId,
       downloadHistory: [{ userId, downloadedAt: new Date(), status: "completed" }],
     });
+    console.log("Saving file record:", record);  // Log the object to inspect
     await record.save();
     res.status(201).json({ message: "File added successfully", record });
   } catch (err) {
-    console.error("Error saving record:", err);
+    console.error("Error saving record:", err); // Log the error details
     res.status(500).json({ error: "Error saving record", details: err.message });
   }
 });
+
 
 // Update file status
 router.post("/update-status", async (req, res) => {

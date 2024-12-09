@@ -20,12 +20,13 @@ const fileRecordSchema = new mongoose.Schema({
         type: Number,
         default: 1
     },
+    //userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }, // Reference to Use
     firstDownloadedBy: {
         type: String,
         required: true
     },
     downloadHistory: [{
-        userId: String,
+        userId: { type: String, required: true },
         downloadedAt: Date,
         status: String // 'completed' or 'cancelled'
     }],
